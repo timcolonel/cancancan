@@ -22,14 +22,14 @@ module CanCan
     end
 
     def load_and_authorize_resource
-      load_resource
+      load_resource(true)
       authorize_resource
     end
 
-    def load_resource
+    def load_resource(need_authorization=false)
       unless skip?(:load)
         if load_instance?
-          self.resource_instance ||= load_resource_instance
+          self.resource_instance ||= load_resource_instance(need_authorization)
         elsif load_collection?
           self.collection_instance ||= load_collection
         end
@@ -61,12 +61,16 @@ module CanCan
 
     protected
 
-    def load_resource_instance
+    def load_resource_instance(need_authorization = false)
       if !parent? && new_actions.include?(@params[:action].to_sym)
         build_resource
       elsif id_param || @options[:singleton]
         resource = find_resource
         if update_actions.include?(@params[:action].to_sym)
+          tmp = self.resource_instance
+          self.resource_instance = resource
+          authorize_resource if need_authorization
+          self.resource_instance = tmp
           resource.assign_attributes(resource_params || {})
           assign_attributes(resource)
         end
