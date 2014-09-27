@@ -26,6 +26,8 @@ module CanCan
       authorize_resource
     end
 
+    # Load the resource
+    # @params need_authorization: For update action does the existing model need to be authorized before updating
     def load_resource(need_authorization=false)
       unless skip?(:load)
         if load_instance?
