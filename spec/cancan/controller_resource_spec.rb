@@ -66,13 +66,13 @@ describe CanCan::ControllerResource do
   end
   context 'on update actions' do
     before :each do
-      params.merge!(action: 'update', id: '123')
+      params.merge!(:action => 'update', :id => '123')
     end
 
     it 'update resource' do
       model = Model.new
       allow(Model).to receive(:find).with('123') { model }
-      params.merge!(model: {name: 'foobar'})
+      params.merge!(:model => {:name => 'foobar'})
       resource = CanCan::ControllerResource.new(controller)
       resource.load_resource
       expect(controller.instance_variable_get(:@model).name).to eq('foobar')
@@ -87,7 +87,7 @@ describe CanCan::ControllerResource do
 
       model = MyEngine::Model.new
       allow(MyEngine::Model).to receive(:find).with('123') { model }
-      params.merge!(controller: 'MyEngine::ModelsController', my_engine_model: {name: 'foobar'})
+      params.merge!(:controller => 'MyEngine::ModelsController', :my_engine_model => {:name => 'foobar'})
       resource = CanCan::ControllerResource.new(controller)
       resource.load_resource
       expect(controller.instance_variable_get(:@model).name).to eq('foobar')
