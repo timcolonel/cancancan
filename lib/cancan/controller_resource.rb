@@ -22,14 +22,16 @@ module CanCan
     end
 
     def load_and_authorize_resource
-      load_resource
+      load_resource(true)
       authorize_resource
     end
 
-    def load_resource
+    # Load the resource
+    # @params need_authorization: For update action does the existing model need to be authorized before updating
+    def load_resource(need_authorization=false)
       unless skip?(:load)
         if load_instance?
-          self.resource_instance ||= load_resource_instance
+          self.resource_instance ||= load_resource_instance(need_authorization)
         elsif load_collection?
           self.collection_instance ||= load_collection
         end
@@ -61,11 +63,20 @@ module CanCan
 
     protected
 
-    def load_resource_instance
+    def load_resource_instance(need_authorization = false)
       if !parent? && new_actions.include?(@params[:action].to_sym)
         build_resource
       elsif id_param || @options[:singleton]
-        find_resource
+        resource = find_resource
+        if update_actions.include?(@params[:action].to_sym)
+          tmp = self.resource_instance
+          self.resource_instance = resource
+          authorize_resource if need_authorization
+          self.resource_instance = tmp
+          resource.assign_attributes(resource_params || {})
+          assign_attributes(resource)
+        end
+        resource
       end
     end
 
@@ -108,7 +119,7 @@ module CanCan
           if resource_base.respond_to? "find_by_#{@options[:find_by]}!"
             resource_base.send("find_by_#{@options[:find_by]}!", id_param)
           elsif resource_base.respond_to? "find_by"
-            resource_base.send("find_by", { @options[:find_by].to_sym => id_param })
+            resource_base.send("find_by", {@options[:find_by].to_sym => id_param})
           else
             resource_base.send(@options[:find_by], id_param)
           end
@@ -139,7 +150,7 @@ module CanCan
     end
 
     def member_action?
-      new_actions.include?(@params[:action].to_sym) || @options[:singleton] || ( (@params[:id] || @params[@options[:id_param]]) && !collection_actions.include?(@params[:action].to_sym))
+      new_actions.include?(@params[:action].to_sym) || @options[:singleton] || ((@params[:id] || @params[@options[:id_param]]) && !collection_actions.include?(@params[:action].to_sym))
     end
 
     # Returns the class used for this resource. This can be overriden by the :class option.
@@ -147,10 +158,14 @@ module CanCan
     # only be used for authorization, not loading since there's no class to load through.
     def resource_class
       case @options[:class]
-      when false  then name.to_sym
-      when nil    then namespaced_name.to_s.camelize.constantize
-      when String then @options[:class].constantize
-      else @options[:class]
+        when false then
+          name.to_sym
+        when nil then
+          namespaced_name.to_s.camelize.constantize
+        when String then
+          @options[:class].constantize
+        else
+          @options[:class]
       end
     end
 
@@ -222,10 +237,13 @@ module CanCan
     def resource_params
       if parameters_require_sanitizing? && params_method.present?
         return case params_method
-          when Symbol then @controller.send(params_method)
-          when String then @controller.instance_eval(params_method)
-          when Proc then params_method.call(@controller)
-        end
+                 when Symbol then
+                   @controller.send(params_method)
+                 when String then
+                   @controller.instance_eval(params_method)
+                 when Proc then
+                   params_method.call(@controller)
+               end
       else
         resource_params_by_namespaced_name
       end
@@ -263,7 +281,7 @@ module CanCan
     end
 
     def namespaced_name
-      [namespace, name.camelize].join('::').singularize.camelize.constantize
+      [namespace, name.camelize].flatten.map(&:camelize).join('::').singularize.constantize
     rescue NameError
       name
     end
@@ -288,10 +306,14 @@ module CanCan
       [:create, :update]
     end
 
+    def update_actions
+      [:update]
+    end
+
     private
 
     def extract_key(value)
-       value.to_s.underscore.gsub('/', '_')
+      value.to_s.underscore.gsub('/', '_')
     end
   end
 end

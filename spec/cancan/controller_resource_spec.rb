@@ -11,6 +11,10 @@ describe CanCan::ControllerResource do
       attr_accessor :name
 
       def initialize(attributes={})
+        assign_attributes(attributes)
+      end
+
+      def assign_attributes(attributes={})
         attributes.each do |attribute, value|
           send("#{attribute}=", value)
         end
@@ -60,6 +64,35 @@ describe CanCan::ControllerResource do
       expect { resource.load_and_authorize_resource }.to raise_error(CanCan::AccessDenied)
     end
   end
+  context 'on update actions' do
+    before :each do
+      params.merge!(:action => 'update', :id => '123')
+    end
+
+    it 'update resource' do
+      model = Model.new
+      allow(Model).to receive(:find).with('123') { model }
+      params.merge!(:model => {:name => 'foobar'})
+      resource = CanCan::ControllerResource.new(controller)
+      resource.load_resource
+      expect(controller.instance_variable_get(:@model).name).to eq('foobar')
+    end
+
+    # Rails includes namespace in params, see issue #349
+    it 'update through the namespaced params' do
+      module MyEngine
+        class Model < ::Model;
+        end
+      end
+
+      model = MyEngine::Model.new
+      allow(MyEngine::Model).to receive(:find).with('123') { model }
+      params.merge!(:controller => 'MyEngine::ModelsController', :my_engine_model => {:name => 'foobar'})
+      resource = CanCan::ControllerResource.new(controller)
+      resource.load_resource
+      expect(controller.instance_variable_get(:@model).name).to eq('foobar')
+    end
+  end
 
   context "on create actions" do
     before :each do
@@ -69,7 +102,8 @@ describe CanCan::ControllerResource do
     # Rails includes namespace in params, see issue #349
     it "creates through the namespaced params" do
       module MyEngine
-        class Model < ::Model; end
+        class Model < ::Model;
+        end
       end
 
       params.merge!(:controller => "MyEngine::ModelsController", :my_engine_model => {:name => "foobar"})
@@ -87,7 +121,8 @@ describe CanCan::ControllerResource do
 
     it "builds a new resource for namespaced model with hash if params[:id] is not specified" do
       module Sub
-        class Model < ::Model; end
+        class Model < ::Model;
+        end
       end
 
       params.merge!('sub_model' => {:name => "foobar"})
@@ -101,6 +136,17 @@ describe CanCan::ControllerResource do
       resource = CanCan::ControllerResource.new(controller, :class => Model)
       resource.load_resource
       expect(controller.instance_variable_get(:@sub_model).name).to eq("foobar")
+    end
+
+    it "builds a new resource for namespaced controller given through folder format" do
+      module Admin
+        module SubModule
+          class HiddenModel < ::Model; end
+        end
+      end
+      params.merge!(:controller => "admin/sub_module/hidden_models")
+      resource = CanCan::ControllerResource.new(controller)
+      expect { resource.load_resource }.not_to raise_error
     end
 
     it "does not build record through has_one association with :singleton option because it can cause it to delete it in the database" do
@@ -126,7 +172,7 @@ describe CanCan::ControllerResource do
 
     context "with a strong parameters method" do
       before :each do
-        params.merge!(:controller => "model", :model => { :name => 'test'})
+        params.merge!(:controller => "model", :model => {:name => 'test'})
       end
 
       it "accepts and uses the specified symbol for santitizing input" do
@@ -144,7 +190,7 @@ describe CanCan::ControllerResource do
       end
 
       it "accepts the specified proc for sanitizing input" do
-        resource = CanCan::ControllerResource.new(controller, {:param_method => Proc.new { |c| {:custom => 'params'}}})
+        resource = CanCan::ControllerResource.new(controller, {:param_method => Proc.new { |c| {:custom => 'params'} }})
         expect(resource.send("resource_params")).to eq(:custom => 'params')
       end
 
@@ -222,7 +268,8 @@ describe CanCan::ControllerResource do
 
     it "has the specified nested resource_class when using / for namespace" do
       module Admin
-        class Dashboard; end
+        class Dashboard;
+        end
       end
       ability.can(:index, "admin/dashboard")
       params.merge!(:controller => "admin/dashboard")
@@ -298,7 +345,8 @@ describe CanCan::ControllerResource do
 
     it "attempts to load a resource with the same namespace as the controller when using :: for namespace" do
       module MyEngine
-        class Model < ::Model; end
+        class Model < ::Model;
+        end
       end
 
       model = MyEngine::Model.new
@@ -435,7 +483,8 @@ describe CanCan::ControllerResource do
 
     it "loads the model using a custom namespaced class" do
       module Sub
-        class Model < ::Model; end
+        class Model < ::Model;
+        end
       end
 
       model = Sub::Model.new
@@ -474,7 +523,7 @@ describe CanCan::ControllerResource do
 
     # CVE-2012-5664
     it "always converts id param to string" do
-      params.merge!(:the_model => { :malicious => "I am" })
+      params.merge!(:the_model => {:malicious => "I am"})
       resource = CanCan::ControllerResource.new(controller, :id_param => :the_model)
       expect(resource.send(:id_param).class).to eq(String)
     end
@@ -507,7 +556,7 @@ describe CanCan::ControllerResource do
   end
 
   it "calls the santitizer when the parameter hash matches our object" do
-    params.merge!(:action => 'create', :model => { :name => 'test' })
+    params.merge!(:action => 'create', :model => {:name => 'test'})
     allow(controller).to receive(:create_params).and_return({})
 
     resource = CanCan::ControllerResource.new(controller)
@@ -525,7 +574,7 @@ describe CanCan::ControllerResource do
   end
 
   it "calls the santitize method on non-save actions when required" do
-    params.merge!(:action => 'new', :model => { :name => 'test' })
+    params.merge!(:action => 'new', :model => {:name => 'test'})
 
     allow(controller).to receive(:resource_params).and_return({})
     resource = CanCan::ControllerResource.new(controller)
@@ -534,7 +583,7 @@ describe CanCan::ControllerResource do
   end
 
   it "doesn't sanitize parameters on non-save actions when not required" do
-    params.merge!(:action => 'new', :not_our_model => { :name => 'test' })
+    params.merge!(:action => 'new', :not_our_model => {:name => 'test'})
     allow(controller).to receive(:resource_params).and_raise
 
     resource = CanCan::ControllerResource.new(controller)
@@ -564,7 +613,8 @@ describe CanCan::ControllerResource do
   end
 
   it "has the specified resource_class if 'name' is passed to load_resource" do
-    class Section; end
+    class Section;
+    end
     resource = CanCan::ControllerResource.new(controller, :section)
     expect(resource.send(:resource_class)).to eq(Section)
   end
